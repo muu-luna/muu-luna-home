@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🌙 むー家の現在地</title>
+<style>
+*{box-sizing:border-box} body{margin:0;background:#f5f6f8;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+.wrap{max-width:680px;margin:auto;padding:16px} h1{font-size:25px;margin:6px 0}.sub{color:#777;margin-bottom:14px}
+.card{background:#fff;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 10px #0001}.hero{background:#303752;color:#fff}
+.big{font-size:34px;font-weight:800;margin:6px 0}.section{font-size:19px;font-weight:800;margin-bottom:7px}
+.small{font-size:13px;color:#777}.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #eee}.row:last-child{border-bottom:0}
+input{width:155px;padding:10px;border:1px solid #ddd;border-radius:10px;font-size:16px;text-align:right}
+button{border:0;border-radius:11px;padding:10px 14px;background:#414d78;color:#fff;font-weight:700;font-size:15px}button.secondary{background:#e9ebf2;color:#222}
+.bank-actions{display:flex;gap:5px;margin-left:4px}
+.bank-actions button{padding:7px 8px;font-size:12px;white-space:nowrap}
+.bank-row{align-items:center}
+.bank-main{flex:1;min-width:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.msg{margin-top:8px;font-size:13px}.footer{text-align:center;color:#777;font-size:13px;padding:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🌙 むー家の現在地</h1>
+<div class="sub">むーが管理する、むー家の資産の現在地</div>
+<div class="card" style="padding:12px 16px;margin-top:0;margin-bottom:12px">
+<div style="font-weight:800;font-size:16px" id="nowDate">現在日時：----</div>
+<div class="small" id="lastSaved">最終保存：未保存</div>
+</div>
+
+<div class="card hero"><div class="small" style="color:#fff">現在の純資産</div><div class="big" id="net">¥0</div><div id="change">前回比：未設定</div></div>
+
+<div class="card">
+<div class="section">🏦 預金</div>
+<div class="small">名義は表示しますが、純資産はむー家として合算します。</div>
+<div id="banks"></div>
+<div class="row"><b>預金合計</b><b id="bankTotal">¥0</b></div>
+<div class="actions"><button type="button" id="addBank">＋銀行を追加</button></div>
+<div class="msg" id="status"></div>
+</div>
+
+<div class="card"><div class="section">💵 現金</div><div class="row"><label>手持ち現金</label><input data-key="cash" type="number" min="0"></div></div>
+<div class="card"><div class="section">📈 投資</div><div class="small">NISA・特定口座などを分けず、現在の合計額だけ。</div><div class="row"><label>投資合計</label><input data-key="invest" type="number" min="0"></div></div>
+<div class="card"><div class="section">₿ Bitcoin</div><div class="row"><label>現在評価額</label><input data-key="bitcoin" type="number" min="0"></div></div>
+<div class="card"><div class="section">📱 PayPay証券</div><div class="row"><label>現在評価額</label><input data-key="paypay" type="number" min="0"></div></div>
+<div class="card"><div class="section">📦 その他</div><div class="row"><label>その他の資産</label><input data-key="other" type="number" min="0"></div></div>
+
+<div class="card">
+<div class="section">🏠 負債</div>
+<div class="row"><label>住宅ローン<br><span class="small">docomo銀行から引落</span></label><input data-key="mortgage" type="number" min="0"></div>
+<div class="row"><label>その他の負債</label><input data-key="debt" type="number" min="0"></div>
+</div>
+
+<div class="card">
+<div class="section">🌙 むーのお小遣い</div>
+<div class="small">使い道は記録しません。残高だけ管理します。</div>
+<div class="row"><label>現在残高</label><input data-key="allowance" type="number" min="0"></div>
+<div class="row"><label>毎月追加</label><b>¥30,000</b></div>
+<div class="row"><label>5万円を超えたら</label><span>超過分を現金へ</span></div>
+<div class="actions"><button type="button" id="addAllowance">今月の3万円を追加</button><button type="button" class="secondary" id="zeroAllowance">0円にする</button></div>
+<div class="msg" id="allowanceNote"></div>
+</div>
+
+<div class="actions">
+<button type="button" id="save">💾 保存</button>
+<button type="button" class="secondary" id="snapshot">📌 今回を前回値にする</button>
+</div>
+<div class="msg" id="saveMsg"></div>
+<div class="footer">🌙 製作者：ルナ氏<br>むーのためだけに作りました</div>
+</div>
+
+<script>
+(function(){
+const KEY="muHomeCurrentV4";
+const defaults=[
+ {name:"イオン銀行",owner:"むー",value:0},
+ {name:"楽天銀行",owner:"むー",value:0},
+ {name:"PayPay銀行",owner:"むー",value:0},
+ {name:"じぶん銀行",owner:"むー",value:0},
+ {name:"docomo銀行",owner:"ヤジ",value:0},
+ {name:"三菱UFJ銀行",owner:"ヤジ",value:0}
+];
+let data={banks:defaults};
+try{const old=JSON.parse(localStorage.getItem(KEY));if(old)data=Object.assign(data,old)}catch(e){}
+if(!Array.isArray(data.banks) || data.banks.length===0)data.banks=defaults.map(b=>({...b}));
+
+function yen(n){return "¥"+Math.round(Number(n)||0).toLocaleString("ja-JP")}
+function num(v){return Number(v)||0}
+function saveData(){localStorage.setItem(KEY,JSON.stringify(data))}
+function formatDateTime(d){
+ const w=["日","月","火","水","木","金","土"][d.getDay()];
+ const pad=n=>String(n).padStart(2,"0");
+ return d.getFullYear()+"年"+(d.getMonth()+1)+"月"+d.getDate()+"日（"+w+"） "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+}
+function updateClock(){document.getElementById("nowDate").textContent="現在日時："+formatDateTime(new Date());}
+function updateLastSaved(){document.getElementById("lastSaved").textContent="最終保存："+(data.savedAt?formatDateTime(new Date(data.savedAt)):"未保存");}
+function bankTotal(){return data.banks.reduce((s,b)=>s+num(b.value),0)}
+function calc(){
+ const net=bankTotal()+num(data.cash)+num(data.invest)+num(data.bitcoin)+num(data.paypay)+num(data.other)-num(data.mortgage)-num(data.debt);
+ document.getElementById("bankTotal").textContent=yen(bankTotal());
+ document.getElementById("net").textContent=yen(net);
+ document.getElementById("change").textContent=data.prevNet==null?"前回比：未設定":"前回比："+(net-data.prevNet>=0?"+":"")+yen(net-data.prevNet);
+ const a=num(data.allowance);
+ document.getElementById("allowanceNote").textContent=a>50000?yen(a-50000)+" を現金へ戻す候補です。":"5万円以下ならそのまま繰り越し。";
+}
+function renderBanks(){
+ const box=document.getElementById("banks");box.innerHTML="";
+ data.banks.forEach((b,i)=>{
+  const row=document.createElement("div");row.className="row bank-row";
+  const main=document.createElement("div");main.className="bank-main";
+  const label=document.createElement("label");label.innerHTML=b.name+"<br><span class='small'>"+b.owner+"名義</span>";
+  main.appendChild(label);
+
+  const input=document.createElement("input");input.type="number";input.min="0";input.value=b.value||0;
+  input.addEventListener("input",function(){data.banks[i].value=num(this.value);saveData();calc();});
+
+  row.append(main,input);
+
+  // 追加した銀行（初期6行以外）だけ変更・削除できる
+  if(i >= defaults.length){
+    const actions=document.createElement("div");actions.className="bank-actions";
+
+    const edit=document.createElement("button");edit.type="button";edit.className="secondary";edit.textContent="変更";
+    edit.addEventListener("click",function(){
+      const newName=prompt("銀行名を変更してください",data.banks[i].name);
+      if(!newName || !newName.trim())return;
+      const newOwner=prompt("名義を変更してください（むー / ヤジ）",data.banks[i].owner);
+      if(!newOwner || !newOwner.trim())return;
+      data.banks[i].name=newName.trim();
+      data.banks[i].owner=newOwner.trim();
+      saveData();renderBanks();calc();
+      document.getElementById("status").textContent="銀行情報を変更しました。";
+    });
+
+    const del=document.createElement("button");del.type="button";del.className="secondary";del.textContent="削除";
+    del.addEventListener("click",function(){
+      if(!confirm(data.banks[i].name+"を削除しますか？"))return;
+      data.banks.splice(i,1);
+      saveData();renderBanks();calc();
+      document.getElementById("status").textContent="銀行を削除しました。";
+    });
+
+    actions.append(edit,del);row.appendChild(actions);
+  }
+
+  box.appendChild(row);
+ });
+}
+function renderInputs(){
+ document.querySelectorAll("input[data-key]").forEach(input=>{
+  const k=input.dataset.key;input.value=data[k]||0;
+  input.addEventListener("input",function(){data[k]=num(this.value);saveData();calc();});
+ });
+}
+document.getElementById("addBank").addEventListener("click",function(){
+ const name=prompt("追加する銀行名を入力してください");
+ if(!name)return;
+ const owner=prompt("名義を入力してください（むー / ヤジ）","むー")||"むー";
+ data.banks.push({name:name.trim(),owner:owner.trim(),value:0});
+ saveData();renderBanks();calc();
+ document.getElementById("status").textContent=name.trim()+"を追加しました。";
+});
+document.getElementById("addAllowance").addEventListener("click",function(){
+ data.allowance=num(data.allowance)+30000;saveData();renderInputs();calc();
+});
+document.getElementById("zeroAllowance").addEventListener("click",function(){
+ data.allowance=0;saveData();renderInputs();calc();
+});
+document.getElementById("save").addEventListener("click",function(){
+ data.savedAt=new Date().toISOString();
+ saveData();updateLastSaved();document.getElementById("saveMsg").textContent="保存しました。";
+});
+document.getElementById("snapshot").addEventListener("click",function(){
+ data.prevNet=bankTotal()+num(data.cash)+num(data.invest)+num(data.bitcoin)+num(data.paypay)+num(data.other)-num(data.mortgage)-num(data.debt);
+ saveData();calc();document.getElementById("saveMsg").textContent="今回の純資産を前回値として保存しました。";
+});
+renderBanks();renderInputs();calc();updateClock();updateLastSaved();setInterval(updateClock,1000);
+})();
+</script>
+</body>
+</html>
